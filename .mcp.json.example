@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "servermonkey": {
+      "type": "stdio",
+      "command": "/path/to/servermonkey/.venv/bin/python3",
+      "args": ["-m", "servermonkey.server"]
+    }
+  }
+}

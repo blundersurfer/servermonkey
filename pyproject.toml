@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "servermonkey"
+version = "0.1.0"
+description = "Secure Proxmox MCP server with libsecret credential management"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp[cli]>=1.0.0",
+    "proxmoxer>=2.0.0",
+    "PyGObject>=3.42.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+servermonkey = "servermonkey.server:main"
+servermonkey-setup = "servermonkey.setup:main"
+
+[tool.setuptools.packages.find]
+include = ["servermonkey*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
