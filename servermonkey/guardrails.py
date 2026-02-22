@@ -31,7 +31,7 @@ _VMID_MAX = 999_999_999
 
 def validate_vmid(vmid: int) -> None:
     """Ensure VMID is in the valid Proxmox range."""
-    if not isinstance(vmid, int) or vmid < _VMID_MIN or vmid > _VMID_MAX:
+    if isinstance(vmid, bool) or not isinstance(vmid, int) or vmid < _VMID_MIN or vmid > _VMID_MAX:
         raise ValueError(f"VMID must be an integer between {_VMID_MIN} and {_VMID_MAX}, got {vmid}")
 
 
@@ -155,7 +155,7 @@ def validate_disk_grow(size_increase_gb: int | float) -> None:
 
 # --- Disk name validation ---
 
-_DISK_RE = re.compile(r"^(scsi|virtio|ide|sata|efidisk|mp|rootfs)\d*$")
+_DISK_RE = re.compile(r"^(?:(scsi|virtio|ide|sata|efidisk|mp)\d+|rootfs)$")
 
 
 def validate_disk_name(disk: str) -> None:

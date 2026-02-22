@@ -3,6 +3,7 @@
 import fcntl
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -14,15 +15,16 @@ _MAX_LOG_SIZE = 10 * 1024 * 1024  # 10 MB — rotate when exceeded
 
 
 def _ensure_audit_dir() -> None:
-    """Create audit directory with 0700 permissions (owner-only access)."""
-    if not _AUDIT_DIR.exists():
-        _AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+    """Create audit directory with 0700 permissions (owner-only access).
+
+    Uses os.makedirs with exist_ok=True to avoid TOCTOU race between
+    checking existence and creating the directory.
+    """
+    os.makedirs(str(_AUDIT_DIR), mode=0o700, exist_ok=True)
+    # Enforce permissions even if directory was created by another process
+    current = os.stat(str(_AUDIT_DIR)).st_mode & 0o777
+    if current != 0o700:
         os.chmod(str(_AUDIT_DIR), 0o700)
-    else:
-        # Ensure permissions are correct even if dir already exists
-        current = os.stat(str(_AUDIT_DIR)).st_mode & 0o777
-        if current != 0o700:
-            os.chmod(str(_AUDIT_DIR), 0o700)
 
 
 def _rotate_if_needed() -> None:
@@ -52,7 +54,7 @@ def log_tool_call(
         "params": _redact_params(params),
     }
     if error is not None:
-        entry["error"] = error
+        entry["error"] = _redact_error(error)
     else:
         entry["result"] = _summarize(result)
 
@@ -74,9 +76,20 @@ def log_tool_call(
 
 _SENSITIVE_KEYS = ("password", "token", "secret", "key")
 
+# Patterns that match sensitive values in error strings
+_SENSITIVE_RE = re.compile(
+    r"(password|token|secret|key)\s*[=:]\s*\S+",
+    re.IGNORECASE,
+)
+
 # Fields that should be logged but truncated (e.g., command args could be long)
 _TRUNCATE_KEYS = ("args", "command")
 _TRUNCATE_MAX = 200
+
+
+def _redact_error(error: str) -> str:
+    """Redact sensitive key=value patterns from error strings."""
+    return _SENSITIVE_RE.sub(r"\1=[REDACTED]", error)
 
 
 def _redact_params(params: dict[str, Any]) -> dict[str, Any]:

@@ -46,15 +46,27 @@ def _get_client() -> ProxmoxClient:
 def _get_config() -> dict[str, Any]:
     if _config is None:
         _get_client()
-    assert _config is not None
+    if _config is None:
+        raise RuntimeError("Config not loaded after client initialization")
     return _config
 
 
 def _get_scripts_dir() -> Path:
     if _scripts_dir is None:
         _get_client()
-    assert _scripts_dir is not None
+    if _scripts_dir is None:
+        raise RuntimeError("Scripts directory not resolved after client initialization")
     return _scripts_dir
+
+
+@mcp.tool()
+def reconnect() -> str:
+    """Reset the Proxmox connection. Use after running servermonkey-setup or editing config.toml."""
+    global _client, _config, _scripts_dir
+    _client = None
+    _config = None
+    _scripts_dir = None
+    return "Connection reset. Next tool call will reconnect with fresh config."
 
 
 # --- Helper to wrap tool calls with audit logging ---
@@ -106,130 +118,158 @@ def list_nodes() -> list[dict]:
 @mcp.tool()
 def node_status(node: str) -> dict:
     """Get detailed status of a specific node (CPU, memory, uptime)."""
-    guardrails.validate_node(node)
     client = _get_client()
-    return _audited("node_status", {"node": node}, lambda: client.node_status(node))
+    def _call():
+        guardrails.validate_node(node)
+        return client.node_status(node)
+    return _audited("node_status", {"node": node}, _call)
 
 
 @mcp.tool()
 def list_vms(node: str) -> list[dict]:
     """List all QEMU VMs on a node."""
-    guardrails.validate_node(node)
     client = _get_client()
-    return _audited("list_vms", {"node": node}, lambda: client.list_vms(node))
+    def _call():
+        guardrails.validate_node(node)
+        return client.list_vms(node)
+    return _audited("list_vms", {"node": node}, _call)
 
 
 @mcp.tool()
 def list_containers(node: str) -> list[dict]:
     """List all LXC containers on a node."""
-    guardrails.validate_node(node)
     client = _get_client()
-    return _audited("list_containers", {"node": node}, lambda: client.list_containers(node))
+    def _call():
+        guardrails.validate_node(node)
+        return client.list_containers(node)
+    return _audited("list_containers", {"node": node}, _call)
 
 
 @mcp.tool()
 def vm_status(node: str, vmid: int) -> dict:
     """Get current status of a QEMU VM."""
-    guardrails.validate_node(node)
-    guardrails.validate_vmid(vmid)
     client = _get_client()
-    return _audited("vm_status", {"node": node, "vmid": vmid}, lambda: client.vm_status(node, vmid))
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        return client.vm_status(node, vmid)
+    return _audited("vm_status", {"node": node, "vmid": vmid}, _call)
 
 
 @mcp.tool()
 def ct_status(node: str, vmid: int) -> dict:
     """Get current status of an LXC container."""
-    guardrails.validate_node(node)
-    guardrails.validate_vmid(vmid)
     client = _get_client()
-    return _audited("ct_status", {"node": node, "vmid": vmid}, lambda: client.ct_status(node, vmid))
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        return client.ct_status(node, vmid)
+    return _audited("ct_status", {"node": node, "vmid": vmid}, _call)
 
 
 @mcp.tool()
 def vm_config(node: str, vmid: int) -> dict:
     """Get configuration of a QEMU VM."""
-    guardrails.validate_node(node)
-    guardrails.validate_vmid(vmid)
     client = _get_client()
-    return _audited("vm_config", {"node": node, "vmid": vmid}, lambda: client.vm_config(node, vmid))
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        return client.vm_config(node, vmid)
+    return _audited("vm_config", {"node": node, "vmid": vmid}, _call)
 
 
 @mcp.tool()
 def ct_config(node: str, vmid: int) -> dict:
     """Get configuration of an LXC container."""
-    guardrails.validate_node(node)
-    guardrails.validate_vmid(vmid)
     client = _get_client()
-    return _audited("ct_config", {"node": node, "vmid": vmid}, lambda: client.ct_config(node, vmid))
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        return client.ct_config(node, vmid)
+    return _audited("ct_config", {"node": node, "vmid": vmid}, _call)
 
 
 @mcp.tool()
 def list_storage(node: str) -> list[dict]:
     """List all storage pools on a node."""
-    guardrails.validate_node(node)
     client = _get_client()
-    return _audited("list_storage", {"node": node}, lambda: client.list_storage(node))
+    def _call():
+        guardrails.validate_node(node)
+        return client.list_storage(node)
+    return _audited("list_storage", {"node": node}, _call)
 
 
 @mcp.tool()
 def storage_content(node: str, storage: str) -> list[dict]:
     """List contents of a storage pool (ISOs, templates, disk images)."""
-    guardrails.validate_node(node)
-    guardrails.validate_storage(storage)
     client = _get_client()
-    return _audited("storage_content", {"node": node, "storage": storage}, lambda: client.storage_content(node, storage))
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_storage(storage)
+        return client.storage_content(node, storage)
+    return _audited("storage_content", {"node": node, "storage": storage}, _call)
 
 
 @mcp.tool()
 def list_tasks(node: str) -> list[dict]:
     """List recent tasks on a node."""
-    guardrails.validate_node(node)
     client = _get_client()
-    return _audited("list_tasks", {"node": node}, lambda: client.list_tasks(node))
+    def _call():
+        guardrails.validate_node(node)
+        return client.list_tasks(node)
+    return _audited("list_tasks", {"node": node}, _call)
 
 
 @mcp.tool()
 def task_status(node: str, upid: str) -> dict:
     """Get status of a specific task by UPID."""
-    guardrails.validate_node(node)
-    guardrails.validate_upid(upid)
     client = _get_client()
-    return _audited("task_status", {"node": node, "upid": upid}, lambda: client.task_status(node, upid))
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_upid(upid)
+        return client.task_status(node, upid)
+    return _audited("task_status", {"node": node, "upid": upid}, _call)
 
 
 @mcp.tool()
 def list_snapshots(node: str, vmid: int, vm_type: str) -> list[dict]:
     """List snapshots of a VM or container. vm_type: 'qemu' or 'lxc'."""
-    guardrails.validate_node(node)
-    guardrails.validate_vmid(vmid)
-    guardrails.validate_vm_type(vm_type)
     client = _get_client()
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        guardrails.validate_vm_type(vm_type)
+        return client.list_snapshots(node, vmid, vm_type)
     return _audited(
         "list_snapshots",
         {"node": node, "vmid": vmid, "vm_type": vm_type},
-        lambda: client.list_snapshots(node, vmid, vm_type),
+        _call,
     )
 
 
 @mcp.tool()
 def cluster_resources(resource_type: str | None = None) -> list[dict]:
     """List cluster resources. Optional filter: 'vm', 'storage', 'node', 'sdn'."""
-    if resource_type is not None:
-        guardrails.validate_resource_type(resource_type)
     client = _get_client()
+    def _call():
+        if resource_type is not None:
+            guardrails.validate_resource_type(resource_type)
+        return client.cluster_resources(resource_type)
     return _audited(
         "cluster_resources",
         {"resource_type": resource_type},
-        lambda: client.cluster_resources(resource_type),
+        _call,
     )
 
 
 @mcp.tool()
 def list_available_templates(node: str) -> list[dict]:
     """List available appliance templates that can be downloaded."""
-    guardrails.validate_node(node)
     client = _get_client()
-    return _audited("list_available_templates", {"node": node}, lambda: client.list_available_templates(node))
+    def _call():
+        guardrails.validate_node(node)
+        return client.list_available_templates(node)
+    return _audited("list_available_templates", {"node": node}, _call)
 
 
 # ============================================================
@@ -249,24 +289,26 @@ def create_vm(
     net0: str = "virtio,bridge=vmbr0",
 ) -> str:
     """Create a new QEMU VM."""
-    guardrails.validate_node(node)
-    guardrails.validate_vmid(vmid)
-    guardrails.validate_guest_name(name)
-    guardrails.validate_cpu(cores)
-    guardrails.validate_memory(memory)
-    guardrails.validate_storage(storage)
-    guardrails.validate_iso(iso)
-    guardrails.validate_net_config(net0)
     client = _get_client()
     params = {
         "node": node, "vmid": vmid, "name": name,
         "memory": memory, "cores": cores, "storage": storage,
         "iso": iso, "net0": net0,
     }
-    return _audited("create_vm", params, lambda: client.create_vm(
-        node, vmid=vmid, name=name, memory=memory, cores=cores,
-        storage=storage, ide2=f"{iso},media=cdrom", net0=net0,
-    ))
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        guardrails.validate_guest_name(name)
+        guardrails.validate_cpu(cores)
+        guardrails.validate_memory(memory)
+        guardrails.validate_storage(storage)
+        guardrails.validate_iso(iso)
+        guardrails.validate_net_config(net0)
+        return client.create_vm(
+            node, vmid=vmid, name=name, memory=memory, cores=cores,
+            storage=storage, ide2=f"{iso},media=cdrom", net0=net0,
+        )
+    return _audited("create_vm", params, _call)
 
 
 @mcp.tool()
@@ -279,21 +321,23 @@ def clone_vm(
     storage: str = "",
 ) -> str:
     """Clone an existing QEMU VM."""
-    guardrails.validate_node(node)
-    guardrails.validate_vmid(vmid)
-    guardrails.validate_vmid(newid)
-    if name:
-        guardrails.validate_guest_name(name)
-    if storage:
-        guardrails.validate_storage(storage)
     client = _get_client()
     params = {"node": node, "vmid": vmid, "newid": newid, "name": name, "full": full, "storage": storage}
-    kwargs: dict[str, Any] = {"newid": newid, "full": int(full)}
-    if name:
-        kwargs["name"] = name
-    if storage:
-        kwargs["storage"] = storage
-    return _audited("clone_vm", params, lambda: client.clone_vm(node, vmid, **kwargs))
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        guardrails.validate_vmid(newid)
+        if name:
+            guardrails.validate_guest_name(name)
+        if storage:
+            guardrails.validate_storage(storage)
+        kwargs: dict[str, Any] = {"newid": newid, "full": int(full)}
+        if name:
+            kwargs["name"] = name
+        if storage:
+            kwargs["storage"] = storage
+        return client.clone_vm(node, vmid, **kwargs)
+    return _audited("clone_vm", params, _call)
 
 
 @mcp.tool()
@@ -308,24 +352,26 @@ def create_container(
     net0: str = "name=eth0,bridge=vmbr0,ip=dhcp",
 ) -> str:
     """Create a new LXC container."""
-    guardrails.validate_node(node)
-    guardrails.validate_vmid(vmid)
-    guardrails.validate_guest_name(hostname)
-    guardrails.validate_template(ostemplate)
-    guardrails.validate_cpu(cores)
-    guardrails.validate_memory(memory)
-    guardrails.validate_storage(storage)
-    guardrails.validate_net_config(net0)
     client = _get_client()
     params = {
         "node": node, "vmid": vmid, "hostname": hostname,
         "ostemplate": ostemplate, "memory": memory, "cores": cores,
         "storage": storage, "net0": net0,
     }
-    return _audited("create_container", params, lambda: client.create_container(
-        node, vmid=vmid, hostname=hostname, ostemplate=ostemplate,
-        memory=memory, cores=cores, storage=storage, net0=net0,
-    ))
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        guardrails.validate_guest_name(hostname)
+        guardrails.validate_template(ostemplate)
+        guardrails.validate_cpu(cores)
+        guardrails.validate_memory(memory)
+        guardrails.validate_storage(storage)
+        guardrails.validate_net_config(net0)
+        return client.create_container(
+            node, vmid=vmid, hostname=hostname, ostemplate=ostemplate,
+            memory=memory, cores=cores, storage=storage, net0=net0,
+        )
+    return _audited("create_container", params, _call)
 
 
 @mcp.tool()
@@ -338,64 +384,72 @@ def clone_container(
     storage: str = "",
 ) -> str:
     """Clone an existing LXC container."""
-    guardrails.validate_node(node)
-    guardrails.validate_vmid(vmid)
-    guardrails.validate_vmid(newid)
-    if hostname:
-        guardrails.validate_guest_name(hostname)
-    if storage:
-        guardrails.validate_storage(storage)
     client = _get_client()
     params = {"node": node, "vmid": vmid, "newid": newid, "hostname": hostname, "full": full, "storage": storage}
-    kwargs: dict[str, Any] = {"newid": newid, "full": int(full)}
-    if hostname:
-        kwargs["hostname"] = hostname
-    if storage:
-        kwargs["storage"] = storage
-    return _audited("clone_container", params, lambda: client.clone_container(node, vmid, **kwargs))
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        guardrails.validate_vmid(newid)
+        if hostname:
+            guardrails.validate_guest_name(hostname)
+        if storage:
+            guardrails.validate_storage(storage)
+        kwargs: dict[str, Any] = {"newid": newid, "full": int(full)}
+        if hostname:
+            kwargs["hostname"] = hostname
+        if storage:
+            kwargs["storage"] = storage
+        return client.clone_container(node, vmid, **kwargs)
+    return _audited("clone_container", params, _call)
 
 
 @mcp.tool()
 def start_guest(node: str, vmid: int, vm_type: str) -> str:
     """Start a VM or container. vm_type: 'qemu' or 'lxc'. Protected VMs (no_stop) cannot be started."""
-    guardrails.validate_node(node)
-    guardrails.validate_vmid(vmid)
-    guardrails.validate_vm_type(vm_type)
-    guardrails.check_not_protected_stop(vmid)
     client = _get_client()
     params = {"node": node, "vmid": vmid, "vm_type": vm_type}
-    if vm_type == "qemu":
-        return _audited("start_guest", params, lambda: client.start_vm(node, vmid))
-    return _audited("start_guest", params, lambda: client.start_container(node, vmid))
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        guardrails.validate_vm_type(vm_type)
+        guardrails.check_not_protected_stop(vmid)
+        if vm_type == "qemu":
+            return client.start_vm(node, vmid)
+        return client.start_container(node, vmid)
+    return _audited("start_guest", params, _call)
 
 
 @mcp.tool()
 def restart_guest(node: str, vmid: int, vm_type: str) -> str:
     """Restart a VM or container. vm_type: 'qemu' or 'lxc'. Protected VMs cannot be restarted."""
-    guardrails.validate_node(node)
-    guardrails.validate_vmid(vmid)
-    guardrails.validate_vm_type(vm_type)
-    guardrails.check_not_protected_stop(vmid)
     client = _get_client()
     params = {"node": node, "vmid": vmid, "vm_type": vm_type}
-    if vm_type == "qemu":
-        return _audited("restart_guest", params, lambda: client.restart_vm(node, vmid))
-    return _audited("restart_guest", params, lambda: client.restart_container(node, vmid))
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        guardrails.validate_vm_type(vm_type)
+        guardrails.check_not_protected_stop(vmid)
+        if vm_type == "qemu":
+            return client.restart_vm(node, vmid)
+        return client.restart_container(node, vmid)
+    return _audited("restart_guest", params, _call)
 
 
 @mcp.tool()
 def resize_disk(node: str, vmid: int, vm_type: str, disk: str, size_increase_gb: int) -> Any:
     """Resize (grow) a disk. Only positive increases allowed. vm_type: 'qemu' or 'lxc'."""
-    guardrails.validate_node(node)
-    guardrails.validate_vmid(vmid)
-    guardrails.validate_vm_type(vm_type)
-    guardrails.validate_disk_name(disk)
-    guardrails.validate_disk_grow(size_increase_gb)
-    guardrails.check_not_protected_modify(vmid)
     client = _get_client()
-    size = f"+{size_increase_gb}G"
     params = {"node": node, "vmid": vmid, "vm_type": vm_type, "disk": disk, "size_increase_gb": size_increase_gb}
-    return _audited("resize_disk", params, lambda: client.resize_disk(node, vmid, vm_type, disk, size))
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        guardrails.validate_vm_type(vm_type)
+        guardrails.validate_disk_name(disk)
+        guardrails.validate_disk_grow(size_increase_gb)
+        guardrails.check_not_protected_modify(vmid)
+        size = f"+{size_increase_gb}G"
+        return client.resize_disk(node, vmid, vm_type, disk, size)
+    return _audited("resize_disk", params, _call)
 
 
 @mcp.tool()
@@ -407,42 +461,45 @@ def update_cpu_memory(
     memory_mb: int | None = None,
 ) -> Any:
     """Update CPU cores and/or memory for a VM/CT. Only increases allowed. vm_type: 'qemu' or 'lxc'."""
-    guardrails.validate_node(node)
-    guardrails.validate_vmid(vmid)
-    guardrails.validate_vm_type(vm_type)
-    guardrails.check_not_protected_modify(vmid)
-
-    if cores is None and memory_mb is None:
-        raise ValueError("Must specify at least one of: cores, memory_mb")
-
     client = _get_client()
-
-    # Fetch current config to enforce increase-only
-    if vm_type == "qemu":
-        current = client.vm_config(node, vmid)
-    else:
-        current = client.ct_config(node, vmid)
-
-    update_kwargs: dict[str, Any] = {}
-    if cores is not None:
-        current_cores = current.get("cores", 1)
-        guardrails.validate_cpu_increase(current_cores, cores)
-        update_kwargs["cores"] = cores
-    if memory_mb is not None:
-        current_memory = current.get("memory", 512)
-        guardrails.validate_memory_increase(current_memory, memory_mb)
-        update_kwargs["memory"] = memory_mb
-
     params = {"node": node, "vmid": vmid, "vm_type": vm_type, "cores": cores, "memory_mb": memory_mb}
-    return _audited("update_cpu_memory", params, lambda: client.update_config(node, vmid, vm_type, **update_kwargs))
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        guardrails.validate_vm_type(vm_type)
+        guardrails.check_not_protected_modify(vmid)
+
+        if cores is None and memory_mb is None:
+            raise ValueError("Must specify at least one of: cores, memory_mb")
+
+        # Fetch current config to enforce increase-only
+        if vm_type == "qemu":
+            current = client.vm_config(node, vmid)
+        else:
+            current = client.ct_config(node, vmid)
+
+        update_kwargs: dict[str, Any] = {}
+        if cores is not None:
+            current_cores = current.get("cores", 1)
+            guardrails.validate_cpu_increase(current_cores, cores)
+            update_kwargs["cores"] = cores
+        if memory_mb is not None:
+            current_memory = current.get("memory", 512)
+            guardrails.validate_memory_increase(current_memory, memory_mb)
+            update_kwargs["memory"] = memory_mb
+
+        return client.update_config(node, vmid, vm_type, **update_kwargs)
+    return _audited("update_cpu_memory", params, _call)
 
 
 @mcp.tool()
 def restart_networking(node: str) -> str:
     """Apply pending network configuration changes on a node."""
-    guardrails.validate_node(node)
     client = _get_client()
-    return _audited("restart_networking", {"node": node}, lambda: client.restart_networking(node))
+    def _call():
+        guardrails.validate_node(node)
+        return client.restart_networking(node)
+    return _audited("restart_networking", {"node": node}, _call)
 
 
 @mcp.tool()
@@ -459,29 +516,31 @@ def download_template(
     Each invocation should be reviewed by the user to verify the download source.
     Only HTTPS URLs are allowed; private/loopback IPs are blocked.
     """
-    guardrails.validate_node(node)
-    guardrails.validate_storage(storage)
-    guardrails.validate_content_type(content_type)
-    if url:
-        guardrails.validate_download_url(url)
-
     client = _get_client()
     params = {"node": node, "storage": storage, "content_type": content_type, "url": url, "template": template}
-    kwargs: dict[str, Any] = {"content": content_type}
-    if url:
-        kwargs["url"] = url
-        # Extract filename from URL path only (strip query string, fragment)
-        url_path = urlparse(url).path
-        filename = Path(url_path).name
-        if not filename or "/" in filename or "\\" in filename:
-            raise ValueError(f"Cannot extract safe filename from URL: {url!r}")
-        kwargs["filename"] = filename
-    elif template:
-        kwargs["template"] = template
-    else:
-        raise ValueError("Must specify either 'url' or 'template'")
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_storage(storage)
+        guardrails.validate_content_type(content_type)
+        if url:
+            guardrails.validate_download_url(url)
 
-    return _audited("download_template", params, lambda: client.download_template(node, storage, **kwargs))
+        kwargs: dict[str, Any] = {"content": content_type}
+        if url:
+            kwargs["url"] = url
+            # Extract filename from URL path only (strip query string, fragment)
+            url_path = urlparse(url).path
+            filename = Path(url_path).name
+            if not filename or "/" in filename or "\\" in filename:
+                raise ValueError(f"Cannot extract safe filename from URL: {url!r}")
+            kwargs["filename"] = filename
+        elif template:
+            kwargs["template"] = template
+        else:
+            raise ValueError("Must specify either 'url' or 'template'")
+
+        return client.download_template(node, storage, **kwargs)
+    return _audited("download_template", params, _call)
 
 
 # ============================================================
@@ -520,25 +579,28 @@ def run_script(node: str, vmid: int, vm_type: str, script_name: str, args: list[
     Scripts are defined in config.toml [scripts] table (inline one-liners)
     or as .sh files in the scripts/ directory. Only pre-vetted scripts can run.
     """
-    guardrails.validate_node(node)
-    guardrails.validate_vmid(vmid)
-    guardrails.validate_vm_type(vm_type)
-    guardrails.check_not_protected_exec(vmid)
-
-    script_body = _resolve_script(script_name)
     client = _get_client()
 
     params = {"node": node, "vmid": vmid, "vm_type": vm_type, "script_name": script_name, "args": args}
 
-    # Use shell positional parameters to safely pass args without injection.
-    # "$@" expands each positional parameter as a separate word, preventing
-    # shell interpretation of user-supplied values.
-    if args:
-        exec_args = ["-c", script_body + ' "$@"', "sh"] + args
-    else:
-        exec_args = ["-c", script_body]
-
     def _exec():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        guardrails.validate_vm_type(vm_type)
+        guardrails.check_not_protected_exec(vmid)
+
+        script_body = _resolve_script(script_name)
+
+        # Use shell positional parameters to safely pass args without injection.
+        # "$@" expands each positional parameter as a separate word, preventing
+        # shell interpretation of user-supplied values.
+        # Ensure script_body ends with a newline before appending "$@"
+        if args:
+            body = script_body if script_body.endswith("\n") else script_body + "\n"
+            exec_args = ["-c", body + '"$@"', "sh"] + args
+        else:
+            exec_args = ["-c", script_body]
+
         result = client.guest_exec(node, vmid, vm_type, "/bin/sh", exec_args)
         pid = result.get("pid")
         if pid is not None:
@@ -556,16 +618,17 @@ def guest_exec(node: str, vmid: int, vm_type: str, command: str, args: list[str]
     Claude Code's permission system ensures the user sees the exact command
     before it runs. Protected VMs cannot be targeted.
     """
-    guardrails.validate_node(node)
-    guardrails.validate_vmid(vmid)
-    guardrails.validate_vm_type(vm_type)
-    guardrails.check_not_protected_exec(vmid)
-    guardrails.validate_command_path(command)
     client = _get_client()
 
     params = {"node": node, "vmid": vmid, "vm_type": vm_type, "command": command, "args": args}
 
     def _exec():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        guardrails.validate_vm_type(vm_type)
+        guardrails.check_not_protected_exec(vmid)
+        guardrails.validate_command_path(command)
+
         result = client.guest_exec(node, vmid, vm_type, command, args)
         pid = result.get("pid")
         if pid is not None:

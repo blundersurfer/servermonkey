@@ -8,15 +8,15 @@ version = "0.1.0"
 description = "Secure Proxmox MCP server with libsecret credential management"
 requires-python = ">=3.11"
 dependencies = [
-    "mcp[cli]>=1.0.0",
-    "proxmoxer>=2.0.0",
-    "PyGObject>=3.42.0",
+    "mcp[cli]>=1.0.0,<2",
+    "proxmoxer>=2.0.0,<3",
+    "PyGObject>=3.42.0,<4",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.23",
+    "pytest>=8.0,<9",
+    "pytest-asyncio>=0.23,<1",
 ]
 
 [project.scripts]
@@ -28,3 +28,6 @@ include = ["servermonkey*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = [
+    "functional: end-to-end tests against live Proxmox (require network + credentials)",
+]

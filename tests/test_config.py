@@ -1,7 +1,10 @@
 """Tests for shared config module."""
 
+import logging
+
 import pytest
 
+from servermonkey import config as config_mod
 from servermonkey.config import validate_schema
 
 
@@ -70,3 +73,14 @@ class TestConfigSchema:
         }
         with pytest.raises(ValueError, match="must be positive"):
             validate_schema(config)
+
+
+class TestConfigEnvVar:
+    def test_env_var_non_toml_warns(self, tmp_path, monkeypatch, caplog):
+        """SERVERMONKEY_CONFIG pointing to a non-.toml file logs a warning."""
+        non_toml = tmp_path / "config.yaml"
+        non_toml.write_text("")
+        monkeypatch.setenv("SERVERMONKEY_CONFIG", str(non_toml))
+        with caplog.at_level(logging.WARNING, logger="servermonkey.config"):
+            config_mod._get_search_paths("SERVERMONKEY_CONFIG", [])
+        assert "non-.toml" in caplog.text

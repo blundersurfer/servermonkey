@@ -36,6 +36,14 @@ class TestVmidValidation:
         with pytest.raises(ValueError, match="VMID must be"):
             guardrails.validate_vmid(-1)
 
+    def test_vmid_bool_true_rejected(self):
+        with pytest.raises(ValueError, match="VMID must be"):
+            guardrails.validate_vmid(True)
+
+    def test_vmid_bool_false_rejected(self):
+        with pytest.raises(ValueError, match="VMID must be"):
+            guardrails.validate_vmid(False)
+
 
 class TestNodeValidation:
     def test_valid_node(self):
@@ -188,6 +196,15 @@ class TestDiskName:
     def test_invalid_name_command(self):
         with pytest.raises(ValueError, match="Invalid disk name"):
             guardrails.validate_disk_name("$(rm -rf /)")
+
+    def test_bare_disk_prefix_rejected(self):
+        """Bare prefix without digit (e.g. 'scsi') should be rejected."""
+        with pytest.raises(ValueError, match="Invalid disk name"):
+            guardrails.validate_disk_name("scsi")
+        with pytest.raises(ValueError, match="Invalid disk name"):
+            guardrails.validate_disk_name("virtio")
+        with pytest.raises(ValueError, match="Invalid disk name"):
+            guardrails.validate_disk_name("mp")
 
 
 class TestIncreaseOnly:

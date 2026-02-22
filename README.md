@@ -83,13 +83,15 @@ cp config.toml.example config.toml
 # Edit config.toml with your Proxmox host, user, token name, and preferences
 ```
 
-### Pin the CA certificate
+### Run interactive setup
 
 ```bash
-.venv/bin/python -m servermonkey.setup
+.venv/bin/servermonkey-setup
 ```
 
-This fetches the Proxmox server's TLS certificate, displays the SHA-256 fingerprint, and asks you to verify it matches what's shown on the Proxmox web UI (Datacenter > Certificates). The certificate is saved to `~/.config/servermonkey/proxmox-ca.pem`.
+The setup wizard will:
+1. **Prompt for credentials** — Proxmox user (e.g. `user@pam`) and API token name, updating `config.toml` and printing the `secret-tool` command to store the token secret in your keyring.
+2. **Pin the CA certificate** — Fetches the Proxmox server's TLS certificate, displays the SHA-256 fingerprint, and asks you to verify it matches what's shown on the Proxmox web UI (Datacenter > Certificates). The certificate is saved to `~/.config/servermonkey/proxmox-ca.pem`.
 
 ### Register with Claude Code
 
@@ -146,7 +148,7 @@ Multi-line scripts go in the `scripts/` directory as `.sh` files and are referen
 - **SSRF protection** — download URLs resolved via `socket.getaddrinfo()` and checked against `ipaddress` module (catches DNS rebinding, IPv6 mapped addresses, hex/octal encoding)
 - **Command path validation** — `guest_exec` requires absolute paths with no shell metacharacters
 - **Shell injection prevention** — `run_script` uses `"$@"` positional parameters, not string concatenation
-- **Audit trail** — atomic file creation (0600), directory permissions (0700), fcntl locking, log rotation, sensitive field redaction
+- **Audit trail** — atomic file creation (0600), directory permissions (0700), fcntl locking, log rotation, sensitive field redaction. Guardrails failures are logged to the audit trail (not silently dropped), providing visibility into rejected probes
 - **Resource caps** — configurable limits on CPU, memory, and disk growth
 - **Core dumps disabled** — `RLIMIT_CORE` set to 0 at client initialization
 
@@ -160,10 +162,14 @@ Multi-line scripts go in the `scripts/` directory as `.sh` files and are referen
 ## Testing
 
 ```bash
-.venv/bin/python -m pytest tests/ -v
+# Unit + integration tests (no network required)
+.venv/bin/pytest tests/ -v
+
+# Functional tests against a live Proxmox cluster
+.venv/bin/pytest tests/test_functional.py -v
 ```
 
-128 tests covering guardrails validation, audit logging, credential retrieval, config schema, server integration, and SSRF bypass vectors.
+154 unit/integration tests covering guardrails validation, audit logging, credential retrieval, config schema, server integration, and SSRF bypass vectors. Functional tests in `tests/test_functional.py` validate end-to-end MCP tool execution against a live Proxmox cluster (marked with `@pytest.mark.functional`, skipped when credentials are unavailable).
 
 ## Project Structure
 

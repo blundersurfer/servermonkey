@@ -1,8 +1,11 @@
 """Configuration loading and validation for ServerMonkey."""
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
     import tomllib
@@ -34,6 +37,10 @@ def _get_search_paths(env_var: str, defaults: list[Path]) -> list[Path]:
     if env_val:
         env_path = Path(env_val)
         if env_path.is_absolute():
+            if env_var == "SERVERMONKEY_CONFIG" and not env_val.endswith(".toml"):
+                logger.warning(
+                    "%s points to a non-.toml file: %s", env_var, env_val
+                )
             paths.append(env_path)
         # Silently ignore relative/empty env values (prevent path traversal)
     paths.extend(defaults)

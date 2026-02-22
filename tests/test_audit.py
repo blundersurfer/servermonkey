@@ -126,6 +126,18 @@ def test_args_list_truncation(audit_file):
     assert len(entry["params"]["args"]) == 5  # Truncated to first 5
 
 
+def test_error_string_redaction(audit_file):
+    """Sensitive key=value patterns in error strings should be redacted."""
+    error_msg = "Connection failed: token=abc123secret key=mysecretkey"
+    audit.log_tool_call("test", {}, error=error_msg)
+
+    lines = audit_file.read_text().strip().split("\n")
+    entry = json.loads(lines[0])
+    assert "abc123secret" not in entry["error"]
+    assert "mysecretkey" not in entry["error"]
+    assert "[REDACTED]" in entry["error"]
+
+
 def test_log_rotation(audit_file, tmp_path):
     """Log rotation should rename the file when over size limit."""
     # Write enough data to exceed the rotation limit

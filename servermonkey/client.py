@@ -1,9 +1,14 @@
 """Thin proxmoxer wrapper. NO delete methods exist by design."""
 
+import logging
 import resource
 from typing import Any
 
 from proxmoxer import ProxmoxAPI
+
+logger = logging.getLogger(__name__)
+
+_SHELL_METACHARS = set(";&|`$(){}")
 
 # Disable core dumps to protect API token in memory
 resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
@@ -120,10 +125,25 @@ class ProxmoxClient:
 
     # --- Guest agent execution ---
 
+    @staticmethod
+    def _warn_shell_metachars(args: list[str]) -> None:
+        """Log a warning if any arg contains shell metacharacters.
+
+        Defense-in-depth: Proxmox API treats args as array elements (no shell
+        interpretation), but we want visibility when potentially dangerous
+        characters are passed.
+        """
+        for i, arg in enumerate(args):
+            if any(c in _SHELL_METACHARS for c in arg):
+                logger.warning(
+                    "guest_exec arg[%d] contains shell metacharacters: %r", i, arg
+                )
+
     def guest_exec(self, node: str, vmid: int, vm_type: str, command: str, args: list[str] | None = None) -> dict:
         """Execute a command inside a guest via QEMU Guest Agent."""
         params: dict[str, Any] = {"command": command}
         if args:
+            self._warn_shell_metachars(args)
             # Proxmox API expects 'input-data' for stdin (optional) but not required.
             # Arguments are passed as a JSON array via the 'arg' key in newer versions,
             # or as individual arg0, arg1, ... in older versions.

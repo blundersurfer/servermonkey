@@ -196,6 +196,19 @@ class TestGuestExec:
         assert "; rm -rf /" in exec_args
 
 
+# --- Reconnect tool ---
+
+class TestReconnect:
+    def test_reconnect_clears_client(self, patched_server):
+        # Verify client is set
+        assert server._client is not None
+        result = server.reconnect()
+        assert "reset" in result.lower()
+        assert server._client is None
+        assert server._config is None
+        assert server._scripts_dir is None
+
+
 # --- Audit integration ---
 
 class TestAuditIntegration:
@@ -217,5 +230,25 @@ class TestAuditIntegration:
         with pytest.raises(ValueError):
             server.vm_status("../evil", 100)
         audit_file = tmp_path / "audit" / "audit.jsonl"
-        # Validation error happens before _audited, so no audit entry for guardrail failures
-        assert not audit_file.exists() or audit_file.read_text().strip() == ""
+        # Guardrail failures now happen inside _audited, so an audit entry with error is logged
+        assert audit_file.exists()
+        lines = audit_file.read_text().strip().split("\n")
+        assert len(lines) == 1
+        entry = json.loads(lines[0])
+        assert "error" in entry
+
+    def test_run_script_no_trailing_newline(self, patched_server):
+        """Script body without trailing newline gets one before '$@'."""
+        result = server.run_script("pve1", 102, "qemu", "check-dns", args=["eth0"])
+        call_args = patched_server.guest_exec.call_args
+        exec_args = call_args[0][4]
+        # The -c argument should have a newline before "$@"
+        assert '\n"$@"' in exec_args[1]
+
+    def test_guest_exec_metachar_args_warns(self, patched_server, caplog):
+        """guest_exec with shell metachar args should log a warning."""
+        import logging
+        from servermonkey.client import ProxmoxClient
+        with caplog.at_level(logging.WARNING, logger="servermonkey.client"):
+            ProxmoxClient._warn_shell_metachars(["hello; world"])
+        assert "shell metacharacters" in caplog.text
