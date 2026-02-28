@@ -28,14 +28,14 @@ Common maintenance tasks: resizing, scaling, template management, and running sc
 
 ### Pre-approved scripts (no approval needed)
 ```
-run_script(node="eshu", vmid=105, vm_type="lxc", script_name="apt-update")
-run_script(node="eshu", vmid=105, vm_type="lxc", script_name="check-disk")
-run_script(node="eshu", vmid=105, vm_type="lxc", script_name="bootstrap-ubuntu")
+run_script(node="pve1", vmid=105, vm_type="lxc", script_name="apt-update")
+run_script(node="pve1", vmid=105, vm_type="lxc", script_name="check-disk")
+run_script(node="pve1", vmid=105, vm_type="lxc", script_name="bootstrap-ubuntu")
 ```
 
 ### Ad-hoc commands (requires human approval)
 ```
-guest_exec(node="eshu", vmid=105, vm_type="lxc", command="systemctl", args=["status", "nginx"])
+guest_exec(node="pve1", vmid=105, vm_type="lxc", command="systemctl", args=["status", "nginx"])
 ```
 
 ## Template Management

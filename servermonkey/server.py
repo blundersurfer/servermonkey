@@ -66,7 +66,9 @@ def reconnect() -> str:
     _client = None
     _config = None
     _scripts_dir = None
-    return "Connection reset. Next tool call will reconnect with fresh config."
+    result = "Connection reset. Next tool call will reconnect with fresh config."
+    audit.log_tool_call("reconnect", {}, result=result)
+    return result
 
 
 # --- Helper to wrap tool calls with audit logging ---
@@ -564,8 +566,17 @@ def _resolve_script(script_name: str) -> str:
     if script_file.is_file():
         return script_file.read_text()
 
+    # Check scripts/apps/*/ subdirectories
+    apps_dir = scripts_dir / "apps"
+    if apps_dir.is_dir():
+        for app_script in apps_dir.glob(f"*/{script_name}.sh"):
+            if app_script.is_file():
+                return app_script.read_text()
+
     available_inline = list(config.get("scripts", {}).keys())
     available_files = [f.stem for f in scripts_dir.glob("*.sh")] if scripts_dir.is_dir() else []
+    if apps_dir.is_dir():
+        available_files += [f.stem for f in apps_dir.glob("*/*.sh")]
     raise ValueError(
         f"Script {script_name!r} not found. "
         f"Available inline: {available_inline}, files: {available_files}"

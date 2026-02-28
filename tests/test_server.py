@@ -195,6 +195,40 @@ class TestGuestExec:
         # The malicious arg should be a separate list element, not in the shell string
         assert "; rm -rf /" in exec_args
 
+    def test_run_script_resolves_app_module(self, patched_server, tmp_path):
+        """Scripts in apps/ subdirs are discovered by _resolve_script."""
+        apps_dir = tmp_path / "scripts" / "apps" / "myapp"
+        apps_dir.mkdir(parents=True)
+        (apps_dir / "myapp-install.sh").write_text("echo installing myapp")
+        result = server.run_script("pve1", 102, "qemu", "myapp-install")
+        assert result["exited"] is True
+
+    def test_run_script_flat_takes_priority_over_app(self, patched_server, tmp_path):
+        """Flat scripts/ is checked before apps/ subdirs."""
+        # test-script.sh already exists in flat scripts/ from fixture
+        apps_dir = tmp_path / "scripts" / "apps" / "test"
+        apps_dir.mkdir(parents=True)
+        (apps_dir / "test-script.sh").write_text("echo from apps dir")
+        result = server.run_script("pve1", 102, "qemu", "test-script")
+        assert result["exited"] is True
+        call_args = patched_server.guest_exec.call_args
+        # The script body should be from the flat dir ("echo hello"), not apps/
+        assert "echo hello" in call_args[0][4][1]
+
+    def test_run_script_not_found_shows_app_scripts(self, patched_server, tmp_path):
+        """Error message lists scripts from apps/ subdirs."""
+        apps_dir = tmp_path / "scripts" / "apps" / "myapp"
+        apps_dir.mkdir(parents=True)
+        (apps_dir / "myapp-install.sh").write_text("echo hi")
+        with pytest.raises(ValueError, match="myapp-install"):
+            server.run_script("pve1", 102, "qemu", "nonexistent")
+
+    def test_run_script_works_without_apps_dir(self, patched_server, tmp_path):
+        """No apps/ directory doesn't cause errors."""
+        # apps/ dir doesn't exist in fixture by default — just verify no crash
+        with pytest.raises(ValueError, match="not found"):
+            server.run_script("pve1", 102, "qemu", "nonexistent")
+
 
 # --- Reconnect tool ---
 
@@ -207,6 +241,17 @@ class TestReconnect:
         assert server._client is None
         assert server._config is None
         assert server._scripts_dir is None
+
+    def test_reconnect_audit_logged(self, patched_server, tmp_path):
+        import json
+        server.reconnect()
+        audit_file = tmp_path / "audit" / "audit.jsonl"
+        assert audit_file.exists()
+        lines = audit_file.read_text().strip().split("\n")
+        assert len(lines) >= 1
+        entry = json.loads(lines[-1])
+        assert entry["tool"] == "reconnect"
+        assert "reset" in entry.get("result", "").lower()
 
 
 # --- Audit integration ---

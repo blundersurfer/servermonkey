@@ -48,7 +48,7 @@ class TestVmidValidation:
 class TestNodeValidation:
     def test_valid_node(self):
         guardrails.validate_node("pve1")
-        guardrails.validate_node("eshu")
+        guardrails.validate_node("node1")
         guardrails.validate_node("node-01")
 
     def test_invalid_node_special_chars(self):

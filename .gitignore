@@ -11,8 +11,14 @@ venv/
 .pytest_cache/
 .mypy_cache/
 
+# Certificates — never commit real certs
+*.pem
+
 # Config contains real hostnames — use config.toml.example as template
 config.toml
 
 # MCP config contains absolute paths — use .mcp.json.example as template
 .mcp.json
+
+# Working plans — personal notes, not for distribution
+Plans/

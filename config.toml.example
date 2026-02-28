@@ -22,3 +22,5 @@ apt-update = "apt update && apt upgrade -y"
 check-dns = "resolvectl status"
 check-disk = "df -h"
 # Multi-line: put .sh files in scripts/ dir, reference by name without extension
+# App modules: put .sh files in scripts/apps/{appname}/ dir, named {appname}-{action}.sh
+# Example: scripts/apps/forgejo/forgejo-install.sh → script_name = "forgejo-install"

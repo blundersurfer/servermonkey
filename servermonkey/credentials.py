@@ -42,7 +42,7 @@ def get_api_token(host: str) -> str:
     if not token:
         raise RuntimeError(
             f"No API token found in libsecret for the configured host. "
-            "Store it with: secret-tool store --label='devai proxmox api token' "
+            "Store it with: secret-tool store --label='servermonkey proxmox api token' "
             "application proxmox service api host <hostname>"
         )
     return token

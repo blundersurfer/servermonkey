@@ -20,7 +20,7 @@ Quick cluster health check — node status, running guests, resource usage, and 
 
 | Node | Status | CPU | Memory | Uptime | VMs | CTs |
 |------|--------|-----|--------|--------|-----|-----|
-| eshu | online | 12% | 45%    | 30d    | 3/5 | 8/10 |
+| pve1 | online | 12% | 45%    | 30d    | 3/5 | 8/10 |
 
 ### Recent Failed Tasks
 - None found ✓
