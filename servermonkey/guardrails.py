@@ -307,6 +307,23 @@ def validate_command_path(command: str) -> None:
         )
 
 
+# --- SSH public key validation ---
+
+_SSH_KEY_TYPES = ("ssh-rsa", "ssh-ed25519", "ssh-dss", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521")
+
+
+def validate_ssh_public_keys(keys: str) -> None:
+    """Validate SSH public key string (one key per line)."""
+    for line in keys.strip().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if not any(line.startswith(kt + " ") for kt in _SSH_KEY_TYPES):
+            raise ValueError(
+                f"Invalid SSH public key (must start with one of {_SSH_KEY_TYPES}): {line[:40]}..."
+            )
+
+
 # --- UPID validation ---
 
 _UPID_RE = re.compile(

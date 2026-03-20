@@ -53,6 +53,9 @@ class ProxmoxClient:
     def ct_config(self, node: str, vmid: int) -> dict:
         return self._api.nodes(node).lxc(vmid).config.get()
 
+    def ct_interfaces(self, node: str, vmid: int) -> list[dict]:
+        return self._api.nodes(node).lxc(vmid).interfaces.get()
+
     def list_storage(self, node: str) -> list[dict]:
         return self._api.nodes(node).storage.get()
 

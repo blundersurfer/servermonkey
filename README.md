@@ -166,10 +166,18 @@ Application-specific scripts live in `scripts/apps/<app-name>/` subdirectories. 
 
 ```
 scripts/apps/
+  czkawka/
+    install-czkawka.sh     # run_script(script_name="install-czkawka")
   forgejo/
     forgejo-install.sh     # run_script(script_name="forgejo-install")
     forgejo-move-repos.sh  # run_script(script_name="forgejo-move-repos")
-    README.md              # Usage docs for the app module
+    README.md
+  matrix/
+    install-matrix.sh      # run_script(script_name="install-matrix")
+    install-shuri-bot.sh   # run_script(script_name="install-shuri-bot")
+    README.md
+  readeck/
+    install-readeck.sh     # run_script(script_name="install-readeck")
 ```
 
 When a script name isn't found in flat `scripts/` or config inline scripts, ServerMonkey searches `scripts/apps/*/` for a matching `.sh` file. Flat scripts take priority over app module scripts if names collide.
@@ -222,6 +230,11 @@ servermonkey/
   setup.py             # Interactive setup wizard (creds + CA cert)
 scripts/               # User-defined guest scripts (.sh files)
   apps/                # App module scripts (auto-discovered subdirs)
+    czkawka/           # Media dedup/organize (czkawka + FileBot in Docker)
+    forgejo/           # Forgejo git server setup and migration
+    matrix/            # Matrix homeserver (Continuwuity + Caddy + Shuri bot)
+    readeck/           # Readeck read-it-later service
+  runpod/              # RunPod GPU pod management CLI + boot scripts
 skill/                 # Claude Code skill definition + workflows
 tests/                 # pytest test suite (160 tests)
 config.toml.example    # Configuration template

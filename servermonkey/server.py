@@ -192,6 +192,17 @@ def ct_config(node: str, vmid: int) -> dict:
 
 
 @mcp.tool()
+def ct_interfaces(node: str, vmid: int) -> list[dict]:
+    """Get network interfaces and IP addresses of a running LXC container."""
+    client = _get_client()
+    def _call():
+        guardrails.validate_node(node)
+        guardrails.validate_vmid(vmid)
+        return client.ct_interfaces(node, vmid)
+    return _audited("ct_interfaces", {"node": node, "vmid": vmid}, _call)
+
+
+@mcp.tool()
 def list_storage(node: str) -> list[dict]:
     """List all storage pools on a node."""
     client = _get_client()
@@ -352,6 +363,7 @@ def create_container(
     cores: int = 1,
     storage: str = "local-lvm",
     net0: str = "name=eth0,bridge=vmbr0,ip=dhcp",
+    ssh_public_keys: str = "",
 ) -> str:
     """Create a new LXC container."""
     client = _get_client()
@@ -360,6 +372,8 @@ def create_container(
         "ostemplate": ostemplate, "memory": memory, "cores": cores,
         "storage": storage, "net0": net0,
     }
+    if ssh_public_keys:
+        params["ssh_public_keys"] = ssh_public_keys
     def _call():
         guardrails.validate_node(node)
         guardrails.validate_vmid(vmid)
@@ -369,10 +383,15 @@ def create_container(
         guardrails.validate_memory(memory)
         guardrails.validate_storage(storage)
         guardrails.validate_net_config(net0)
-        return client.create_container(
-            node, vmid=vmid, hostname=hostname, ostemplate=ostemplate,
+        if ssh_public_keys:
+            guardrails.validate_ssh_public_keys(ssh_public_keys)
+        create_kwargs = dict(
+            vmid=vmid, hostname=hostname, ostemplate=ostemplate,
             memory=memory, cores=cores, storage=storage, net0=net0,
         )
+        if ssh_public_keys:
+            create_kwargs["ssh-public-keys"] = ssh_public_keys
+        return client.create_container(node, **create_kwargs)
     return _audited("create_container", params, _call)
 
 
