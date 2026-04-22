@@ -1,0 +1,299 @@
+"""Integration tests for server.py tools with mocked ProxmoxClient."""
+
+from unittest.mock import MagicMock, patch
+
+
+import pytest
+
+from servermonkey import guardrails, audit, server
+
+
+@pytest.fixture
+def mock_client():
+    """Create a mock ProxmoxClient and patch it into the server module."""
+    client = MagicMock()
+    # Default return values for common calls
+    client.list_nodes.return_value = [{"node": "pve1", "status": "online"}]
+    client.node_status.return_value = {"cpu": 0.12, "memory": {"used": 1024}}
+    client.list_vms.return_value = [{"vmid": 100, "name": "test-vm"}]
+    client.list_containers.return_value = [{"vmid": 200, "name": "test-ct"}]
+    client.vm_status.return_value = {"status": "running"}
+    client.ct_status.return_value = {"status": "running"}
+    client.vm_config.return_value = {"cores": 2, "memory": 2048}
+    client.ct_config.return_value = {"cores": 1, "memory": 512}
+    client.guest_exec.return_value = {"pid": 42}
+    client.guest_exec_status.return_value = {"exited": True, "exitcode": 0, "out-data": "ok"}
+    return client
+
+
+@pytest.fixture
+def patched_server(mock_client, tmp_path):
+    """Patch server globals so tools use the mock client without real Proxmox."""
+    test_config = {
+        "proxmox": {"host": "test.example.com", "user": "test@pve", "token_name": "t", "ca_cert_path": "/tmp/x"},
+        "resource_caps": {"max_vcpus": 8, "max_memory_mb": 16384, "max_disk_grow_gb": 100},
+        "protected": {"no_stop": [100, 101], "no_modify": [200]},
+        "storage": {"allowed": ["local", "local-lvm"]},
+        "scripts": {"apt-update": "apt update && apt upgrade -y", "check-dns": "resolvectl status"},
+    }
+    guardrails.init(test_config)
+
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    (scripts_dir / "test-script.sh").write_text("echo hello")
+
+    audit_dir = tmp_path / "audit"
+    audit_file = audit_dir / "audit.jsonl"
+
+    with patch.object(server, "_client", mock_client), \
+         patch.object(server, "_config", test_config), \
+         patch.object(server, "_scripts_dir", scripts_dir), \
+         patch.object(audit, "_AUDIT_DIR", audit_dir), \
+         patch.object(audit, "_AUDIT_FILE", audit_file):
+        yield mock_client
+
+
+# --- Read-only tools ---
+
+class TestReadOnlyTools:
+    def test_list_nodes(self, patched_server):
+        result = server.list_nodes()
+        assert result == [{"node": "pve1", "status": "online"}]
+        patched_server.list_nodes.assert_called_once()
+
+    def test_node_status_validates_node(self, patched_server):
+        with pytest.raises(ValueError, match="Invalid node name"):
+            server.node_status("../etc")
+
+    def test_vm_status_validates_vmid(self, patched_server):
+        with pytest.raises(ValueError, match="VMID must be"):
+            server.vm_status("pve1", 50)
+
+    def test_cluster_resources_validates_type(self, patched_server):
+        patched_server.cluster_resources.return_value = []
+        with pytest.raises(ValueError, match="resource_type must be"):
+            server.cluster_resources("invalid")
+
+    def test_cluster_resources_none_type_ok(self, patched_server):
+        patched_server.cluster_resources.return_value = []
+        result = server.cluster_resources(None)
+        assert result == []
+
+    def test_storage_content_validates_allowlist(self, patched_server):
+        with pytest.raises(ValueError, match="not in allowlist"):
+            server.storage_content("pve1", "evil-nfs")
+
+    def test_task_status_validates_upid(self, patched_server):
+        with pytest.raises(ValueError, match="Invalid UPID"):
+            server.task_status("pve1", "not-a-upid")
+
+
+# --- Mutating tools ---
+
+class TestMutatingTools:
+    def test_create_vm_validates_all_params(self, patched_server):
+        # Bad guest name
+        with pytest.raises(ValueError, match="Invalid guest name"):
+            server.create_vm("pve1", 300, ";evil", 2048, 2, "local", "local:iso/test.iso")
+
+    def test_create_vm_validates_iso(self, patched_server):
+        with pytest.raises(ValueError, match="Invalid ISO"):
+            server.create_vm("pve1", 300, "test-vm", 2048, 2, "local", "not-an-iso")
+
+    def test_create_vm_validates_net(self, patched_server):
+        with pytest.raises(ValueError, match="Invalid network"):
+            server.create_vm("pve1", 300, "test-vm", 2048, 2, "local", "local:iso/test.iso", "evil;cmd")
+
+    def test_resize_disk_positive_only(self, patched_server):
+        with pytest.raises(ValueError, match="must be positive"):
+            server.resize_disk("pve1", 102, "qemu", "scsi0", -5)
+
+    def test_resize_disk_protected(self, patched_server):
+        with pytest.raises(ValueError, match="protected and cannot be modified"):
+            server.resize_disk("pve1", 200, "qemu", "scsi0", 10)
+
+    def test_update_cpu_memory_increase_only(self, patched_server):
+        # Current is 2 cores, trying to go to 1
+        with pytest.raises(ValueError, match="CPU reduction not allowed"):
+            server.update_cpu_memory("pve1", 102, "qemu", cores=1)
+
+    def test_restart_guest_protected(self, patched_server):
+        with pytest.raises(ValueError, match="protected and cannot be restarted"):
+            server.restart_guest("pve1", 100, "qemu")
+
+    def test_start_guest_protected(self, patched_server):
+        with pytest.raises(ValueError, match="protected and cannot be restarted"):
+            server.start_guest("pve1", 100, "qemu")
+
+    @patch("servermonkey.guardrails.socket.getaddrinfo",
+           lambda *a, **kw: [(2, 1, 6, "", ("192.168.1.1", 443))])
+    def test_download_template_private_ip(self, patched_server):
+        with pytest.raises(ValueError, match="private/loopback"):
+            server.download_template("pve1", "local", "iso", url="https://192.168.1.1/test.iso")
+
+    def test_clone_vm_validates_name(self, patched_server):
+        with pytest.raises(ValueError, match="Invalid guest name"):
+            server.clone_vm("pve1", 102, 300, name=";evil")
+
+
+# --- Guest execution tools ---
+
+class TestGuestExec:
+    def test_guest_exec_calls_client(self, patched_server):
+        result = server.guest_exec("pve1", 102, "qemu", "/bin/echo", ["hello"])
+        assert result["exited"] is True
+        patched_server.guest_exec.assert_called_once()
+
+    def test_guest_exec_protected_blocked(self, patched_server):
+        # VMID 100 is in no_stop, should block exec
+        with pytest.raises(ValueError, match="protected and cannot have commands"):
+            server.guest_exec("pve1", 100, "qemu", "/bin/echo")
+
+    def test_guest_exec_no_modify_blocked(self, patched_server):
+        # VMID 200 is in no_modify, should block exec
+        with pytest.raises(ValueError, match="protected and cannot have commands"):
+            server.guest_exec("pve1", 200, "lxc", "/bin/echo")
+
+    def test_guest_exec_validates_command_path(self, patched_server):
+        with pytest.raises(ValueError, match="Invalid command path"):
+            server.guest_exec("pve1", 102, "qemu", "echo")  # Not absolute
+
+    def test_guest_exec_rejects_metachar(self, patched_server):
+        with pytest.raises(ValueError, match="Invalid command path"):
+            server.guest_exec("pve1", 102, "qemu", "/bin/echo; rm -rf /")
+
+    def test_run_script_protected_blocked(self, patched_server):
+        with pytest.raises(ValueError, match="protected and cannot have commands"):
+            server.run_script("pve1", 100, "qemu", "apt-update")
+
+    def test_run_script_resolves_inline(self, patched_server):
+        result = server.run_script("pve1", 102, "qemu", "apt-update")
+        assert result["exited"] is True
+        # Verify /bin/sh was called
+        call_args = patched_server.guest_exec.call_args
+        assert call_args[0][3] == "/bin/sh"  # command
+
+    def test_run_script_resolves_file(self, patched_server):
+        result = server.run_script("pve1", 102, "qemu", "test-script")
+        assert result["exited"] is True
+
+    def test_run_script_not_found(self, patched_server):
+        with pytest.raises(ValueError, match="not found"):
+            server.run_script("pve1", 102, "qemu", "nonexistent")
+
+    def test_run_script_validates_name(self, patched_server):
+        with pytest.raises(ValueError, match="Invalid script name"):
+            server.run_script("pve1", 102, "qemu", "../../../etc/passwd")
+
+    def test_run_script_args_safe(self, patched_server):
+        """Verify args use safe positional parameter passing."""
+        server.run_script("pve1", 102, "qemu", "apt-update", args=["; rm -rf /"])
+        call_args = patched_server.guest_exec.call_args
+        exec_args = call_args[0][4]  # args parameter
+        # Should use "$@" pattern, not string concatenation
+        assert '"$@"' in exec_args[1]
+        # The malicious arg should be a separate list element, not in the shell string
+        assert "; rm -rf /" in exec_args
+
+    def test_run_script_resolves_app_module(self, patched_server, tmp_path):
+        """Scripts in apps/ subdirs are discovered by _resolve_script."""
+        apps_dir = tmp_path / "scripts" / "apps" / "myapp"
+        apps_dir.mkdir(parents=True)
+        (apps_dir / "myapp-install.sh").write_text("echo installing myapp")
+        result = server.run_script("pve1", 102, "qemu", "myapp-install")
+        assert result["exited"] is True
+
+    def test_run_script_flat_takes_priority_over_app(self, patched_server, tmp_path):
+        """Flat scripts/ is checked before apps/ subdirs."""
+        # test-script.sh already exists in flat scripts/ from fixture
+        apps_dir = tmp_path / "scripts" / "apps" / "test"
+        apps_dir.mkdir(parents=True)
+        (apps_dir / "test-script.sh").write_text("echo from apps dir")
+        result = server.run_script("pve1", 102, "qemu", "test-script")
+        assert result["exited"] is True
+        call_args = patched_server.guest_exec.call_args
+        # The script body should be from the flat dir ("echo hello"), not apps/
+        assert "echo hello" in call_args[0][4][1]
+
+    def test_run_script_not_found_shows_app_scripts(self, patched_server, tmp_path):
+        """Error message lists scripts from apps/ subdirs."""
+        apps_dir = tmp_path / "scripts" / "apps" / "myapp"
+        apps_dir.mkdir(parents=True)
+        (apps_dir / "myapp-install.sh").write_text("echo hi")
+        with pytest.raises(ValueError, match="myapp-install"):
+            server.run_script("pve1", 102, "qemu", "nonexistent")
+
+    def test_run_script_works_without_apps_dir(self, patched_server, tmp_path):
+        """No apps/ directory doesn't cause errors."""
+        # apps/ dir doesn't exist in fixture by default — just verify no crash
+        with pytest.raises(ValueError, match="not found"):
+            server.run_script("pve1", 102, "qemu", "nonexistent")
+
+
+# --- Reconnect tool ---
+
+class TestReconnect:
+    def test_reconnect_clears_client(self, patched_server):
+        # Verify client is set
+        assert server._client is not None
+        result = server.reconnect()
+        assert "reset" in result.lower()
+        assert server._client is None
+        assert server._config is None
+        assert server._scripts_dir is None
+
+    def test_reconnect_audit_logged(self, patched_server, tmp_path):
+        import json
+        server.reconnect()
+        audit_file = tmp_path / "audit" / "audit.jsonl"
+        assert audit_file.exists()
+        lines = audit_file.read_text().strip().split("\n")
+        assert len(lines) >= 1
+        entry = json.loads(lines[-1])
+        assert entry["tool"] == "reconnect"
+        assert "reset" in entry.get("result", "").lower()
+
+
+# --- Audit integration ---
+
+class TestAuditIntegration:
+    def test_successful_call_produces_one_entry(self, patched_server, tmp_path):
+        server.list_nodes()
+        audit_file = tmp_path / "audit" / "audit.jsonl"
+        lines = audit_file.read_text().strip().split("\n")
+        assert len(lines) == 1
+
+    def test_guest_exec_produces_one_entry(self, patched_server, tmp_path):
+        """guest_exec should NOT double-log (was a bug)."""
+        server.guest_exec("pve1", 102, "qemu", "/bin/echo")
+        audit_file = tmp_path / "audit" / "audit.jsonl"
+        lines = audit_file.read_text().strip().split("\n")
+        assert len(lines) == 1  # Not 2!
+
+    def test_failed_call_logs_error(self, patched_server, tmp_path):
+        import json
+        with pytest.raises(ValueError):
+            server.vm_status("../evil", 100)
+        audit_file = tmp_path / "audit" / "audit.jsonl"
+        # Guardrail failures now happen inside _audited, so an audit entry with error is logged
+        assert audit_file.exists()
+        lines = audit_file.read_text().strip().split("\n")
+        assert len(lines) == 1
+        entry = json.loads(lines[0])
+        assert "error" in entry
+
+    def test_run_script_no_trailing_newline(self, patched_server):
+        """Script body without trailing newline gets one before '$@'."""
+        result = server.run_script("pve1", 102, "qemu", "check-dns", args=["eth0"])
+        call_args = patched_server.guest_exec.call_args
+        exec_args = call_args[0][4]
+        # The -c argument should have a newline before "$@"
+        assert '\n"$@"' in exec_args[1]
+
+    def test_guest_exec_metachar_args_warns(self, patched_server, caplog):
+        """guest_exec with shell metachar args should log a warning."""
+        import logging
+        from servermonkey.client import ProxmoxClient
+        with caplog.at_level(logging.WARNING, logger="servermonkey.client"):
+            ProxmoxClient._warn_shell_metachars(["hello; world"])
+        assert "shell metacharacters" in caplog.text

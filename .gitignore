@@ -1,0 +1,40 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Certificates — never commit real certs
+*.pem
+
+# Config contains real hostnames — use config.toml.example as template
+config.toml
+
+# MCP config contains absolute paths — use .mcp.json.example as template
+.mcp.json
+
+# Working plans — personal notes, not for distribution
+Plans/
+
+# Private folder — internal docs, system cards, homelab-specific scripts, PRDs
+private/
+
+# Per-user Claude Code permissions
+.claude/settings.local.json
+
+# System cards: only the EXAMPLE template ships publicly.
+# Real per-container cards stay local — they expose homelab topology.
+docs/system-cards/*
+!docs/system-cards/EXAMPLE-*.md
+!docs/system-cards/README.md
+
+# scripts/runpod/ — RunPod boot/overlay/controller tooling.
+# NOT READY FOR PUBLIC RELEASE. Keep locally; do not ship until reviewed and sanitized.
+scripts/runpod/

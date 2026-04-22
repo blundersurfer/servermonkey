@@ -1,0 +1,28 @@
+[proxmox]
+host = "proxmox.example.com"
+user = "servermonkey@pve"            # Use a dedicated least-privilege user
+token_name = "mcp"                   # API token name
+ca_cert_path = "~/.config/servermonkey/proxmox-ca.pem"
+
+[resource_caps]
+max_vcpus = 8
+max_memory_mb = 16384                # 16 GB
+max_disk_grow_gb = 100               # Per single resize operation
+
+[protected]
+# Add your own protected VMIDs here (e.g., gateway, backup target, anything you can't risk).
+# Examples below are illustrative only — leave empty if you don't have any yet.
+no_stop = []                         # VMIDs that can't be restarted
+no_modify = []                       # VMIDs that can't have config changed
+
+[storage]
+allowed = ["local", "local-lvm"]     # Add volume names here
+
+[scripts]
+# Inline one-liners (run via QEMU guest agent)
+apt-update = "apt update && apt upgrade -y"
+check-dns = "resolvectl status"
+check-disk = "df -h"
+# Multi-line: put .sh files in scripts/ dir, reference by name without extension
+# App modules: put .sh files in scripts/apps/{appname}/ dir, named {appname}-{action}.sh
+# Example: scripts/apps/forgejo/forgejo-install.sh → script_name = "forgejo-install"
