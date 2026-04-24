@@ -5,58 +5,37 @@ Secure [MCP](https://modelcontextprotocol.io/) server that gives AI agents safe,
 
 ## Why I built this
 
-I have a lot of ideas and not a lot of time. IT Ops is a tediious process of testing and failure leading to eventual sucess. That's great if I want to learn, but terrible if it's just a sidequest to doing something else. This MCP is meant to solve that problem. Make managing my infrastructure easy without building a footgun. It's got to be 
+I have a lot of ideas and not a lot of time. IT Ops is a tedious process of testing and failure leading to eventual success. That's great if I want to learn, but terrible if it's just a sidequest to doing something else. This MCP is meant to solve that problem. Make managing my infrastructure easy without building a footgun. It's got to be:
 1. Actually useful
 2. Safe enough
-3. Be transparent enough that I can see tarpits I'm walking into
+3. Transparent so I can see the tarpits I'm walking into
 
-I have a firewall and segemented network, family services like backups, photo managmenet, media servers, internal CA, etc. Lab services like git, proxmox vms, conatiners, and microvms, VM and container images, AI resources  and oather stuff. Failure in the wrong area can mean losing decades of family photos, the network going down on an important work meeting, or losing months of research. So, I've essetnally got my own personal Prod.
+I host family services alongside my lab. Failure in the wrong area can mean losing decades of family photos, the network going down on an important work meeting, or losing months of research. So, I've essentially got my own personal Prod.
 
-## Context
+## Context (aka The Problem)
 
-ServerMonkey is the Proxmox access layer for my personal homelab. My lab is sprawling and haphazard and has many projects sitting inthe backlog due to a lack of energy or enthusiasm. Now that I've got my shiny robot to lower the activation enery for projects I need a way to spin up the resoures I need when I need it. That meant handing my aassisnt a Proxmox API token with enough power to get stuff done, but not rm -rf my lab.
+ServerMonkey is the Proxmox access layer for my personal homelab. My lab is sprawling and haphazard and has many projects sitting in the backlog due to a lack of energy or enthusiasm. Now that I've got my shiny robot to lower the activation energy for projects I need a way to spin up the resources I need when I need it. As has been seen in many a Twitter post, AI autonomy + dangerous permissions + time == outage. So this means handing my assistant a Proxmox API token with enough power to get stuff done, but not `rm -rf` my lab.
 
-## How I use this and my biases
-
-1. Start with a planning session with your favourite robot
-2. Make sure to discuss what options there are for your usecae. Check what's the state of the art, what's popular, what's mainatined etc. When possible I personally avoid 
-  1. Immature or experimental applications and projects
-  2. Projects that aren't maintained anymore
-  3. Projects that are not widely used
-  4. Anytyhing that smells off.
-5. Use planning mode to cover the installation process
-6. Review your plan for architectural and security issues
-7. Finally deploy the base template
-8. Manually tweak any settings you need. (Bootstrapping SSH, setting VLAN tags)
-9. Make sure the robot can access the conainter/vm, etc to configure the rest of the services.
-10. Testing that everything works
-
-It seems like a lot but I'd rather be more invlved and move slower if it means I don't need to worry aobut my entire homelab disappearing becuase of a clever robot.
-
-
-## Secrity Thoughts:
-1. Keep everything sketchy on it's own subnet. This means the permissions don't allow changing the vlan tags
-2. Don't give permissions to the robot to destroy resoruces. If you need to burn something down type the commands yourself.
-3. Don't give permissions to stop resource. This one is opinoinated. I'd rather have too much running than have something I need stop.
-4. Don't touch files you shoudln't. The robot can't delete or write to file spaces it shoudln't
-5. Core services are segemnted on a differnt device. Because I'm paranoid this Proxmox node is specically for playing with, not core services
-6. I want to know what is done by the robot. Containers and VM's use it's own number space YXX. IAM roles are named appropriately "sa-name". SMB mountpoints are created per app with scoped access tokens for the required proxmox roles.
-
-
-## The Problem
-
-AI agents are increasingly capable of managing infrastructure: provisioning VMs, scaling resources, deploying services. But giving an agent API access to a hypervisor is giving it the keys to every machine you own. A single prompt injection, a misunderstood instruction, or an overly ambitious plan can delete VMs, wipe backups, or exfiltrate credentials — and the agent will do it confidently, without hesitation.
-
-The standard approach is to add confirmation prompts and hope the human catches the dangerous ones. ServerMonkey takes a different position: **make destructive operations impossible, not just inconvenient.** There is no delete tool to misuse. There is no stop command to invoke. The attack surface isn't minimized — it's absent.
+The usual fix is a confirmation dialog. But for an agent, "confirm" is just another tool call. ServerMonkey takes a different position: **make destructive operations impossible, not just inconvenient.** There's no delete tool to misuse. No stop command to invoke. The attack surface isn't minimized — it's absent.
 
 ## Design Philosophy
 
 ServerMonkey is built on a principle borrowed from safety-critical systems engineering: **if a failure mode is unacceptable, don't mitigate it — eliminate the mechanism entirely.**
 
 - **No delete operations exist.** Not behind a flag, not with confirmation. The client has no method, the server has no tool, the API call is never constructed. You cannot delete a VM, container, snapshot, backup, or disk image through ServerMonkey. Deletion remains a human-only operation performed through the Proxmox web UI.
-- **No stop operations exist.** A misbehaving agent cannot shut down production services. Restart is available (with protected-VM enforcement), but stop is not.
+- **No stop operations exist.** A misbehaving agent cannot shut down production services. Restart is available (with protected-VM enforcement), but stop is not. *I'd rather have too much running than have something I need stopped — an opinionated tradeoff, deliberately.*
 - **Resources only grow.** Disk resize uses a `+` prefix (enforced at the API call layer). CPU and memory changes compare against current config and reject reductions. An agent can scale up to handle load; it cannot starve a workload.
 - **Credentials never touch disk.** API tokens live in the system keyring (libsecret/GNOME Keyring) and are retrieved at runtime. No `.env` files to leak, no config values to commit, no environment variables for other processes to read.
+
+### Security Thoughts
+
+The bullets above are enforced by code. These are the operator-side practices I pair them with — habits that live in how I wire up the homelab, not in this repo's source.
+
+1. **Keep everything sketchy on its own subnet.** VLAN tag changes are not in the robot's permission scope.
+2. **Don't touch things you shouldn't.** Token-scoped permissions, scoped filesystem access, physical and logical separation, single-use systems. Things that shouldn't mix stay separate.
+3. **Limit the blast radius.** Because I'm paranoid, this Proxmox node is specifically for playing with, not for core services.
+4. **Name so you know what things are.** Containers and VMs created by the robot use their own number space (YXX). IAM roles are named `sa-<function>`. SMB mountpoints are created per app with scoped access tokens for the required Proxmox roles. Names are consistent and match across data and control planes.
+
 
 ## Security Architecture
 
@@ -195,7 +174,11 @@ Every resolved IP is checked, not just the first — which defeats DNS rebinding
 
 ## Why not alternatives?
 
-<!-- REVIEW: Draft comparisons below. Edit each to match your actual evaluation. These are the three most-asked reviewer questions; leaving them unanswered looks like you didn't consider them. -->
+**Why not use an existing project?**
+1. My threat model is not your threat model. I am willing to trade a less turnkey solution so I don't need to run an incident at home. 
+2. Because now I don't have to worry about supply chain risks. If you write it you know what's in it.
+3. I don't have to write it. I'd rather spend the tokens once and have a tool that works the way I need and want it to. Why hack security into someone else's code?
+4. It's good practice to think through my workflow.
 
 **Why not Proxmox CLI + sudoers restrictions?** The obvious approach: constrain what commands an agent can run over SSH. In practice, building a sudoers policy that permits "clone VM from template" while forbidding "delete VM" requires parsing `qm` arguments in a shell regex, which is exactly the pattern-matching approach guardrails.py replaces. Worse, SSH-as-API makes every operation a shell-injection opportunity. A Python guardrails module is auditable; a sudoers regex is not.
 
@@ -203,7 +186,6 @@ Every resolved IP is checked, not just the first — which defeats DNS rebinding
 
 **Why not raw Proxmox REST API with a scoped token?** Proxmox tokens can be privilege-scoped, but the granularity stops at roles like `PVEVMAdmin` — which includes delete. There's no "PVEVMAdmin without destroy" role. A tighter role can't be synthesized without an intermediate service; that service is this one.
 
-<!-- REVIEW: If you've evaluated other options (Terraform, Packer, Proxmox-as-a-Service platforms), add them. Three is the floor, not the ceiling. -->
 
 ## Tools
 
@@ -246,31 +228,47 @@ Every resolved IP is checked, not just the first — which defeats DNS rebinding
 
 ## System Cards
 
-Each deployed container and VM has a **system card** in `docs/system-cards/` — a single document describing what's running, why this software was selected over alternatives, resource sizing, network topology, and the bootstrap procedure. System cards are the operator-readable counterpart to ServerMonkey's machine-enforced guardrails: guardrails tell the *agent* what it can do, system cards tell *humans* what exists and why.
+Each deployed container and VM in my homelab has a **system card** in `docs/system-cards/` — a single document capturing what's running, why this software was selected over alternatives, resource sizing, network topology, and the bootstrap procedure. System cards are the operator-readable counterpart to ServerMonkey's machine-enforced guardrails: *guardrails tell the agent what it can do; system cards tell humans what exists and why*.
 
-Current system cards:
+**The pattern is public; the content is private.** Real per-container cards live alongside the source but are gitignored — they describe specific homelab topology (VMIDs, hostnames, internal users, IP plans). Only the template ships publicly:
 
-- [`ct507-wiki.md`](docs/system-cards/ct507-wiki.md) — Wiki.js personal knowledge base
-- [`ct508-vecdb.md`](docs/system-cards/ct508-vecdb.md) — PostgreSQL + pgvector AI memory layer
+- [`EXAMPLE-ct-template.md`](docs/system-cards/EXAMPLE-ct-template.md) — copy this, rename to `ct<id>-<hostname>.md`, fill in your own values
 
-<!-- REVIEW: If you add/retire containers, keep this list current. If you have more system cards than two, list them all or just say "see docs/system-cards/". -->
+The `.gitignore` rule (`docs/system-cards/*` with `!EXAMPLE-*.md` exception) keeps the directory layout intact while excluding real cards. New operators get the template and a clean slate; existing operators keep their per-container documentation co-located with the code.
 
 ## Example Session
 
-<!-- REVIEW: This is a plausible transcript but not a real one. Either (a) record a real session via asciinema and replace, or (b) mark this as illustrative. Real transcripts are more persuasive. -->
-
 ```
-You: "Provision a small Debian 12 container on node eshu for a pihole instance. Call it dns-test, give it 1 GB RAM, 8 GB disk."
-Shuri: [calls list_available_templates]
+You: "I want a new git server. Deply forgejo to a conatiner. Reccomend the sizing and call out any changes I should make. "
+Robot: [calls list_available_templates]
        Debian 12 template is available on local storage.
-       [calls create_container: vmid=513, node=eshu, template=debian_12, memory=1024, disk=8]
-       Created CT 513 on eshu. Storage: local-lvm. Protected-list: no.
+       [calls create_container: vmid=513, node=hydra, template=debian_12, memory=1024, disk=8]
+       Created CT 513 on hydra. Storage: local-lvm. Protected-list: no.
 
 You: "Actually, delete it — wrong subnet."
-Shuri: ServerMonkey doesn't expose a delete tool. To remove CT 513, use the Proxmox web UI at https://eshu.local:8006 → Datacenter → eshu → CT 513 → More → Remove. I can stop the container from being started again, but the delete is a human operation.
+Robot: ServerMonkey doesn't expose a delete tool. To remove CT 513, use the Proxmox web UI at https://hydra.local:8006 → Datacenter → hydra → CT 513 → More → Remove. I can stop the container from being started again, but the delete is a human operation.
 ```
 
 The "delete refusal" behavior is structural, not a policy layer — the `delete` method does not exist on `Proxmox` client, so the tool can't be invoked. An agent probing for deletion capabilities finds nothing to exploit.
+
+## How I use this (and my biases)
+
+ServerMonkey is the code-enforced part of the story. This is the operator-enforced part — the workflow I actually run when I'm provisioning something new.
+
+1. Start with a planning session with your favourite robot.
+2. Discuss what options exist for your use case. Check state of the art, what's popular, what's maintained. I personally avoid:
+   - Immature or experimental applications and projects
+   - Projects that aren't maintained anymore
+   - Projects that aren't widely used
+   - Anything that smells off
+3. Use planning mode to cover the installation process.
+4. Review the plan for architectural and security issues.
+5. Deploy the base template.
+6. Manually tweak any settings that matter (SSH bootstrapping, VLAN tags) — I don't let the robot touch these.
+7. Let the robot access the container/VM to configure the rest of the services.
+8. Test that everything works.
+
+It seems like a lot, but I'd rather be more involved and move slower if it means I don't need to worry about my entire homelab disappearing because of a clever robot.
 
 ## Testing
 
@@ -304,7 +302,7 @@ The "delete refusal" behavior is structural, not a policy layer — the `delete`
 ### Install
 
 ```bash
-git clone <repo-url> && cd servermonkey
+git clone https://github.com/blundersurfer/servermonkey && cd servermonkey
 python3 -m venv --system-site-packages .venv
 .venv/bin/pip install -e ".[dev]"
 ```
@@ -336,7 +334,7 @@ secret-tool store --label="servermonkey proxmox api token" \
 cp .mcp.json.example .mcp.json
 
 # Or register via Claude Code CLI
-claude mcp add servermonkey -- /path/to/.venv/bin/python3 -m servermonkey.server
+claude mcp add servermonkey --  $(pwd)/.venv/bin/python3 -m servermonkey.server
 ```
 
 ## Configuration
@@ -393,22 +391,19 @@ servermonkey/
   setup.py             # Interactive setup wizard
 scripts/               # Pre-approved guest scripts
   apps/                # Auto-discovered app module scripts
-tests/                 # 160 tests
+tests/                 # 162 tests
 ```
 
 ## Built with AI-augmented engineering
 
 This codebase was built by me with Claude (via Claude Code) as an implementation partner. The thesis, threat model, architectural decisions, and security tradeoffs are mine; Claude is an accelerant for implementation, test generation, and iteration on specification. The result is a codebase where every non-trivial design choice — the structural absence of delete operations, the DNS-resolution-based SSRF check, the dual-redaction audit layer — originated from human reasoning about this system's failure modes.
 
-<!-- REVIEW: If you want to go further, link to a docs/methodology.md explaining your agent-augmented workflow. AI labs actively want to see thoughtful use of AI-assisted engineering — this is positive signal, not concession. -->
 
 ## Related Work
 
 - [Model Context Protocol](https://modelcontextprotocol.io/) — Anthropic's open standard for connecting AI agents to tools and data sources. ServerMonkey is designed against the MCP specification and Anthropic's tool-use best practices.
 - [Proxmox VE](https://www.proxmox.com/en/proxmox-virtual-environment/overview) — the hypervisor this server manages.
 - [proxmoxer](https://github.com/proxmoxer/proxmoxer) — the Python Proxmox SDK ServerMonkey wraps.
-
-<!-- REVIEW: Add links to any security research or prior art that influenced the design (e.g., capability-based security papers, similar agent-safety projects). -->
 
 
 ## Dependencies
